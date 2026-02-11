@@ -10,6 +10,7 @@ import {
   BarChart3,
   Smartphone,
   Brain,
+  Camera,
 } from "lucide-react";
 
 const Index = () => {
@@ -96,6 +97,36 @@ const Index = () => {
             </div>
           </motion.button>
         </div>
+
+        {/* Live Detection Card */}
+        <motion.button
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.5 }}
+          onClick={() => navigate("/detection")}
+          className="group max-w-4xl mx-auto mt-4 md:mt-6 w-full bg-card rounded-xl border shadow-card hover:shadow-card-hover p-5 md:p-6 text-left transition-all duration-300 hover:-translate-y-1"
+        >
+          <div className="flex items-center gap-4">
+            <div className="rounded-xl bg-info/10 p-3 group-hover:bg-info/15 transition-colors">
+              <Camera className="h-7 w-7 text-info" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h2 className="font-display font-bold text-lg md:text-xl text-foreground mb-1">
+                Live Detection
+              </h2>
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                Real-time webcam detection with feature extraction. Access your device camera for live object detection and analysis.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2 hidden sm:flex">
+              {["Webcam", "Real-time", "Features"].map((tag) => (
+                <span key={tag} className="text-[10px] font-semibold px-2 py-1 rounded-full bg-info/10 text-info">
+                  {tag}
+                </span>
+              ))}
+            </div>
+          </div>
+        </motion.button>
       </div>
 
       {/* Features */}
