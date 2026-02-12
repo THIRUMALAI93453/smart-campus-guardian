@@ -1,73 +1,85 @@
-# Welcome to your Lovable project
+# GuardianX – AI-Powered Classroom & Exam Monitoring
 
-## Project info
+**Stop cheating. Track attendance. Protect learning — with GuardianX AI.** — Thirumalai
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+---
 
-## How can I edit this code?
+## Project Info
 
-There are several ways of editing your application.
+**Description**:
+GuardianX is an AI-powered system that automatically tracks classroom attendance, monitors student engagement, and prevents exam malpractice. It provides real-time insights and actionable alerts for teachers and institutions. This project is entirely my original work, from idea to prototype and development.
 
-**Use Lovable**
+**Demo / URL**: *(Add your hosted demo URL here, if any)*
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+---
 
-Changes made via Lovable will be committed automatically to this repo.
+## How to Run the Project Locally
 
-**Use your preferred IDE**
+To work on this project locally, follow these steps:
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
+**Requirements:** Node.js & npm installed ([install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating))
 
 ```sh
-# Step 1: Clone the repository using the project's Git URL.
+# Step 1: Clone the repository
 git clone <YOUR_GIT_URL>
 
-# Step 2: Navigate to the project directory.
+# Step 2: Navigate to the project directory
 cd <YOUR_PROJECT_NAME>
 
-# Step 3: Install the necessary dependencies.
-npm i
+# Step 3: Install dependencies
+npm install
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+# Step 4: Start the development server
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+* Edit the code with your preferred IDE
+* Save changes and reload the development server to see updates
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+---
 
-**Use GitHub Codespaces**
+## Technologies Used
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+* **Vite** – Fast front-end tooling
+* **TypeScript** – Type safety
+* **React** – UI framework
+* **Tailwind CSS** – Styling
+* **shadcn-ui** – UI components
 
-## What technologies are used for this project?
+*(You can remove shadcn-ui if you replaced it with your own components.)*
 
-This project is built with:
+---
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+## Features
 
-## How can I deploy this project?
+### Classroom Mode
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
+* Automatic attendance & proxy detection
+* Behavior analysis & engagement scoring
+* Advisory alerts for teachers
+* Reports & analytics dashboard
 
-## Can I connect a custom domain to my Lovable project?
+### Exam Hall Mode
 
-Yes, you can!
+* Student identity verification
+* Pattern-based cheating detection
+* Unauthorized device detection
+* Evidence-based alert system
+* Human-in-the-loop supervision
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+---
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+## Deployment
+
+* Build and deploy using your preferred hosting (Vercel, Netlify, or custom server)
+* Fully cross-device compatible (desktop, tablet, mobile)
+
+---
+
+## Short Description for GitHub
+
+> AI-powered classroom and exam monitoring system that tracks attendance, detects cheating, and ensures fair learning. Fully original project by Thirumalai.
+
+---
+
+Do you want me to do that next?
