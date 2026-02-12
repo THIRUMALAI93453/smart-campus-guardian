@@ -35,8 +35,8 @@ const Index = () => {
               SmartCampus AI
             </h1>
             <p className="text-base md:text-lg opacity-85 max-w-xl mx-auto leading-relaxed">
-              Ethical, pattern-based AI monitoring for classrooms and exam halls. 
-              Empowering educators with intelligent insights — not automated judgments.
+              Real-time computer vision with rule-based intelligence to analyze attendance patterns
+              and detect exam malpractice in a privacy-preserving, industry-standard manner.
             </p>
           </motion.div>
         </div>
@@ -172,10 +172,10 @@ const Index = () => {
           </h3>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {[
-              { icon: Users, label: "Face Recognition", desc: "Automated attendance" },
-              { icon: Eye, label: "Pattern Analysis", desc: "Behavior monitoring" },
-              { icon: BarChart3, label: "Analytics", desc: "Engagement reports" },
-              { icon: Shield, label: "Ethical AI", desc: "Human-in-the-loop" },
+              { icon: Users, label: "Person Tracking", desc: "Centroid-based tracking" },
+              { icon: Eye, label: "Rule Engine", desc: "Temporal pattern analysis" },
+              { icon: BarChart3, label: "Live Analytics", desc: "Real-time dashboards" },
+              { icon: Shield, label: "Privacy-First", desc: "No biometric storage" },
             ].map((feat, i) => (
               <motion.div
                 key={feat.label}
