@@ -7,6 +7,7 @@ import Index from "./pages/Index";
 import ClassroomDashboard from "./pages/ClassroomDashboard";
 import ExamHallDashboard from "./pages/ExamHallDashboard";
 import LiveDetection from "./pages/LiveDetection";
+import Reports from "./pages/Reports";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -22,6 +23,7 @@ const App = () => (
           <Route path="/classroom" element={<ClassroomDashboard />} />
           <Route path="/exam" element={<ExamHallDashboard />} />
           <Route path="/detection" element={<LiveDetection />} />
+          <Route path="/reports" element={<Reports />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
