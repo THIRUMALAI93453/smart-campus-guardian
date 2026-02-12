@@ -1,8 +1,10 @@
 /**
  * Detection & Feature Extraction Module
- * Placeholder implementation — architecture supports plugging in a real ML model
- * (e.g., TensorFlow.js, ONNX Runtime, or remote API calls).
+ * Uses TensorFlow.js COCO-SSD for real object detection.
  */
+
+import * as cocoSsd from "@tensorflow-models/coco-ssd";
+import "@tensorflow/tfjs";
 
 export interface BoundingBox {
   x: number;
@@ -41,85 +43,135 @@ export interface DetectionResult {
   frameHeight: number;
 }
 
+let model: cocoSsd.ObjectDetection | null = null;
+let modelLoading = false;
 let frameCounter = 0;
 
+export async function loadModel(): Promise<void> {
+  if (model || modelLoading) return;
+  modelLoading = true;
+  try {
+    model = await cocoSsd.load({ base: "lite_mobilenet_v2" });
+    console.log("COCO-SSD model loaded");
+  } catch (err) {
+    console.error("Failed to load COCO-SSD model:", err);
+    throw err;
+  } finally {
+    modelLoading = false;
+  }
+}
+
+export function isModelLoaded(): boolean {
+  return model !== null;
+}
+
 /**
- * Run detection on an ImageData frame.
- * This is a placeholder that generates realistic-looking detections
- * based on actual pixel analysis of the frame.
- * Replace the body of this function with a real ML model call.
+ * Run COCO-SSD detection on a video element or canvas.
  */
-export function runDetection(frame: ImageData): DetectionResult {
+export async function runDetection(
+  source: HTMLVideoElement | HTMLCanvasElement | ImageData
+): Promise<DetectionResult> {
   const start = performance.now();
-  const { width, height, data } = frame;
   frameCounter++;
 
-  // Analyze real pixel regions to generate context-aware detections
-  const detections: Detection[] = [];
+  if (!model) {
+    return { detections: [], features: [], processingTimeMs: 0, frameWidth: 0, frameHeight: 0 };
+  }
+
+  // Determine dimensions
+  let width: number, height: number;
+  let detectSource: HTMLVideoElement | HTMLCanvasElement;
+
+  if (source instanceof ImageData) {
+    const canvas = document.createElement("canvas");
+    canvas.width = source.width;
+    canvas.height = source.height;
+    const ctx = canvas.getContext("2d")!;
+    ctx.putImageData(source, 0, 0);
+    detectSource = canvas;
+    width = source.width;
+    height = source.height;
+  } else {
+    detectSource = source;
+    width = source instanceof HTMLVideoElement ? source.videoWidth : source.width;
+    height = source instanceof HTMLVideoElement ? source.videoHeight : source.height;
+  }
+
+  if (width === 0 || height === 0) {
+    return { detections: [], features: [], processingTimeMs: 0, frameWidth: width, frameHeight: height };
+  }
+
+  const predictions = await model.detect(detectSource, 10, 0.3);
+
+  const detections: Detection[] = predictions.map((p, i) => ({
+    id: `det_${frameCounter}_${i}`,
+    label: p.class,
+    confidence: parseFloat(p.score.toFixed(3)),
+    bbox: {
+      x: p.bbox[0],
+      y: p.bbox[1],
+      width: p.bbox[2],
+      height: p.bbox[3],
+    },
+  }));
+
+  // Extract features from each detection region
   const features: FeatureVector[] = [];
+  // Get pixel data for feature extraction
+  let pixelData: ImageData | null = null;
+  try {
+    const tempCanvas = document.createElement("canvas");
+    tempCanvas.width = width;
+    tempCanvas.height = height;
+    const ctx = tempCanvas.getContext("2d")!;
+    if (source instanceof ImageData) {
+      ctx.putImageData(source, 0, 0);
+    } else {
+      ctx.drawImage(source, 0, 0);
+    }
+    pixelData = ctx.getImageData(0, 0, width, height);
+  } catch {
+    // Canvas tainted or other error — skip feature extraction
+  }
 
-  // Scan grid regions for areas with significant edge/color variation
-  const gridCols = 4;
-  const gridRows = 3;
-  const cellW = Math.floor(width / gridCols);
-  const cellH = Math.floor(height / gridRows);
+  if (pixelData) {
+    for (const det of detections) {
+      const stats = analyzeRegion(
+        pixelData.data,
+        width,
+        Math.max(0, Math.round(det.bbox.x)),
+        Math.max(0, Math.round(det.bbox.y)),
+        Math.min(Math.round(det.bbox.width), width),
+        Math.min(Math.round(det.bbox.height), height)
+      );
 
-  const labels = ["person", "face", "hand", "phone", "notebook", "pen", "object"];
-
-  for (let row = 0; row < gridRows; row++) {
-    for (let col = 0; col < gridCols; col++) {
-      const regionStats = analyzeRegion(data, width, col * cellW, row * cellH, cellW, cellH);
-
-      // Only create detection if region has enough variance (something interesting)
-      if (regionStats.edgeIntensity > 30 && regionStats.contrast > 15) {
-        const id = `det_${frameCounter}_${row}_${col}`;
-        const labelIdx = (row * gridCols + col + Math.floor(frameCounter / 10)) % labels.length;
-        const confidence = Math.min(0.99, 0.5 + regionStats.edgeIntensity / 200 + regionStats.contrast / 200);
-
-        // Tight bounding box within the cell
-        const margin = 0.15;
-        const bbox: BoundingBox = {
-          x: col * cellW + cellW * margin,
-          y: row * cellH + cellH * margin,
-          width: cellW * (1 - 2 * margin),
-          height: cellH * (1 - 2 * margin),
-        };
-
-        detections.push({ id, label: labels[labelIdx], confidence: parseFloat(confidence.toFixed(3)), bbox });
-
-        features.push({
-          detectionId: id,
-          label: labels[labelIdx],
-          edgeIntensity: parseFloat(regionStats.edgeIntensity.toFixed(2)),
-          aspectRatio: parseFloat((bbox.width / bbox.height).toFixed(3)),
-          area: Math.round(bbox.width * bbox.height),
-          centroidX: parseFloat((bbox.x + bbox.width / 2).toFixed(1)),
-          centroidY: parseFloat((bbox.y + bbox.height / 2).toFixed(1)),
-          meanBrightness: parseFloat(regionStats.meanBrightness.toFixed(2)),
-          contrast: parseFloat(regionStats.contrast.toFixed(2)),
-          dominantHue: parseFloat(regionStats.dominantHue.toFixed(1)),
-          keypointCount: Math.floor(regionStats.edgeIntensity / 5),
-          textureDensity: parseFloat((regionStats.edgeIntensity / 100).toFixed(3)),
-        });
-      }
+      features.push({
+        detectionId: det.id,
+        label: det.label,
+        edgeIntensity: parseFloat(stats.edgeIntensity.toFixed(2)),
+        aspectRatio: parseFloat((det.bbox.width / Math.max(det.bbox.height, 1)).toFixed(3)),
+        area: Math.round(det.bbox.width * det.bbox.height),
+        centroidX: parseFloat((det.bbox.x + det.bbox.width / 2).toFixed(1)),
+        centroidY: parseFloat((det.bbox.y + det.bbox.height / 2).toFixed(1)),
+        meanBrightness: parseFloat(stats.meanBrightness.toFixed(2)),
+        contrast: parseFloat(stats.contrast.toFixed(2)),
+        dominantHue: parseFloat(stats.dominantHue.toFixed(1)),
+        keypointCount: Math.floor(stats.edgeIntensity / 5),
+        textureDensity: parseFloat((stats.edgeIntensity / 100).toFixed(3)),
+      });
     }
   }
 
-  // Keep top detections by confidence
-  detections.sort((a, b) => b.confidence - a.confidence);
-  const top = detections.slice(0, 6);
-  const topIds = new Set(top.map((d) => d.id));
-
   return {
-    detections: top,
-    features: features.filter((f) => topIds.has(f.detectionId)),
+    detections,
+    features,
     processingTimeMs: parseFloat((performance.now() - start).toFixed(2)),
     frameWidth: width,
     frameHeight: height,
   };
 }
 
-/** Analyze a rectangular region of pixel data for edge intensity, brightness, contrast, and hue */
+/** Analyze a rectangular region for edge intensity, brightness, contrast, and hue */
 function analyzeRegion(
   data: Uint8ClampedArray,
   imgWidth: number,
@@ -133,7 +185,7 @@ function analyzeRegion(
   let edgeSum = 0;
   let hueSum = 0;
   let count = 0;
-  const step = 4; // sample every 4th pixel for speed
+  const step = 4;
 
   for (let y = startY; y < startY + regionH; y += step) {
     for (let x = startX; x < startX + regionW; x += step) {
@@ -143,14 +195,12 @@ function analyzeRegion(
       sumBrightness += brightness;
       sumSqBrightness += brightness * brightness;
 
-      // Simple edge via neighbor difference
       if (x + step < startX + regionW && y + step < startY + regionH) {
         const ni = ((y + step) * imgWidth + (x + step)) * 4;
         const nb = 0.299 * data[ni] + 0.587 * data[ni + 1] + 0.114 * data[ni + 2];
         edgeSum += Math.abs(brightness - nb);
       }
 
-      // Hue approximation
       const max = Math.max(r, g, b), min = Math.min(r, g, b);
       if (max - min > 10) {
         let hue = 0;
@@ -160,7 +210,6 @@ function analyzeRegion(
         if (hue < 0) hue += 360;
         hueSum += hue;
       }
-
       count++;
     }
   }
@@ -189,19 +238,16 @@ export function drawDetections(
     const w = det.bbox.width * scaleX;
     const h = det.bbox.height * scaleY;
 
-    // Box
     ctx.strokeStyle = det.confidence > 0.75 ? "#22c55e" : det.confidence > 0.6 ? "#eab308" : "#ef4444";
     ctx.lineWidth = 2;
     ctx.strokeRect(x, y, w, h);
 
-    // Label background
     const text = `${det.label} ${(det.confidence * 100).toFixed(0)}%`;
     ctx.font = "bold 12px monospace";
     const tm = ctx.measureText(text);
     ctx.fillStyle = ctx.strokeStyle;
     ctx.fillRect(x, y - 18, tm.width + 8, 18);
 
-    // Label text
     ctx.fillStyle = "#000";
     ctx.fillText(text, x + 4, y - 5);
   });
