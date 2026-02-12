@@ -1,160 +1,255 @@
+import { useState, useRef, useCallback, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
   Users,
   UserCheck,
   UserX,
   AlertTriangle,
-  TrendingUp,
+  Camera,
+  CameraOff,
+  SwitchCamera,
+  Zap,
+  Eye,
+  Loader2,
+  Activity,
   Clock,
-  Smartphone,
-  Moon,
+  TrendingUp,
 } from "lucide-react";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { LiveCameraFeed, type LiveFeedHandle } from "@/components/LiveCameraFeed";
 import { StatCard } from "@/components/StatCard";
-import { AlertItem } from "@/components/AlertItem";
 import { EngagementRing } from "@/components/EngagementRing";
-import { StudentTable } from "@/components/StudentTable";
-
-const classroomAlerts = [
-  {
-    severity: "medium" as const,
-    title: "Vikram Singh — Low Engagement",
-    description: "Head-down posture detected for 8+ minutes. Possible sleeping or disengagement.",
-    timestamp: "10:24 AM · Seat B1",
-  },
-  {
-    severity: "low" as const,
-    title: "Rohan Gupta — Mobile Usage",
-    description: "Repeated phone usage pattern detected over 5-minute window.",
-    timestamp: "10:18 AM · Seat A3",
-  },
-  {
-    severity: "high" as const,
-    title: "Karthik Nair — Proxy Alert",
-    description: "Face data mismatch with registered profile. Manual verification recommended.",
-    timestamp: "10:05 AM · Seat B3",
-  },
-  {
-    severity: "low" as const,
-    title: "Meera Das — Frequent Movement",
-    description: "Repeated seat movement and turning detected. No immediate concern.",
-    timestamp: "10:12 AM · Seat B4",
-  },
-];
-
-const timelineData = [
-  { time: "10:00", event: "Baseline period started", type: "info" },
-  { time: "10:03", event: "Baseline complete — monitoring active", type: "success" },
-  { time: "10:05", event: "Proxy alert flagged for B3", type: "alert" },
-  { time: "10:12", event: "Movement pattern noted at B4", type: "info" },
-  { time: "10:18", event: "Phone usage detected at A3", type: "warning" },
-  { time: "10:24", event: "Low engagement alert for B1", type: "warning" },
-];
-
-const timelineColors = {
-  info: "bg-info",
-  success: "bg-success",
-  warning: "bg-warning",
-  alert: "bg-destructive",
-};
+import { CentroidTracker } from "@/lib/tracker";
+import { AttendanceRuleEngine, type AttendanceSnapshot } from "@/lib/rules/attendanceRules";
+import { SessionLogger, type SessionEvent } from "@/lib/sessionLogger";
+import type { DetectionResult } from "@/lib/detection";
 
 export default function ClassroomDashboard() {
+  const feedRef = useRef<LiveFeedHandle>(null);
+  const trackerRef = useRef(new CentroidTracker({ maxDistance: 150, maxLostFrames: 45 }));
+  const rulesRef = useRef(new AttendanceRuleEngine({ minPresenceDurationMs: 10_000 }));
+  const loggerRef = useRef(new SessionLogger());
+
+  const [modelStatus, setModelStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [isMonitoring, setIsMonitoring] = useState(false);
+  const [fps, setFps] = useState(0);
+  const [snapshot, setSnapshot] = useState<AttendanceSnapshot | null>(null);
+  const [events, setEvents] = useState<SessionEvent[]>([]);
+  const [detectionCount, setDetectionCount] = useState(0);
+
+  // Listen for logger events
+  useEffect(() => {
+    const unsub = loggerRef.current.onEvent(() => {
+      setEvents(loggerRef.current.getEvents().slice(-50).reverse());
+    });
+    return unsub;
+  }, []);
+
+  const handleDetection = useCallback((result: DetectionResult) => {
+    if (result.detections.length === 0 && !snapshot) return;
+
+    const now = Date.now();
+    const tracks = trackerRef.current.update(result.detections, now);
+    const { snapshot: snap, entries, exits } = rulesRef.current.process(tracks);
+
+    setSnapshot(snap);
+    setDetectionCount(result.detections.length);
+
+    // Log entry/exit events
+    for (const id of entries) {
+      loggerRef.current.log(
+        "person_entered",
+        "info",
+        "Person Entered",
+        `Tracked individual ${id} entered the frame.`,
+        { trackId: id }
+      );
+    }
+    for (const id of exits) {
+      loggerRef.current.log(
+        "person_exited",
+        "low",
+        "Person Exited",
+        `Tracked individual ${id} left the frame.`,
+        { trackId: id }
+      );
+    }
+  }, [snapshot]);
+
+  const handleStart = async () => {
+    trackerRef.current.reset();
+    rulesRef.current.reset();
+    loggerRef.current.clear();
+    loggerRef.current.log("session_start", "info", "Session Started", "Classroom monitoring session initiated.");
+    await feedRef.current?.start();
+    setIsMonitoring(true);
+  };
+
+  const handleStop = () => {
+    feedRef.current?.stop();
+    loggerRef.current.log("session_end", "info", "Session Ended", "Classroom monitoring session ended.");
+    setIsMonitoring(false);
+    setSnapshot(null);
+    setDetectionCount(0);
+  };
+
+  const stabilityColor = snapshot?.classStability === "stable" ? "text-success" : snapshot?.classStability === "moderate" ? "text-warning" : "text-destructive";
+  const presencePercent = snapshot && snapshot.totalDetected > 0
+    ? Math.round((snapshot.presentCount / snapshot.totalDetected) * 100)
+    : 0;
+
+  const sessionDuration = snapshot
+    ? `${Math.floor(snapshot.sessionDurationMs / 60000)}m ${Math.floor((snapshot.sessionDurationMs % 60000) / 1000)}s`
+    : "0m 0s";
+
+  const modelNotReady = modelStatus !== "ready";
+
+  const severityColors: Record<string, string> = {
+    info: "bg-info",
+    low: "bg-success",
+    medium: "bg-warning",
+    high: "bg-destructive",
+  };
+
   return (
-    <DashboardLayout title="Classroom Mode" subtitle="Attendance & Class Observation">
-      {/* Stats */}
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4 }}
-        className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6"
-      >
-        <StatCard icon={Users} label="Total Students" value={10} subtitle="Section A · Room 204" />
-        <StatCard icon={UserCheck} label="Present" value={8} variant="success" subtitle="80% attendance" />
-        <StatCard icon={UserX} label="Absent" value={2} variant="destructive" />
-        <StatCard icon={AlertTriangle} label="Active Alerts" value={4} variant="warning" subtitle="Advisory only" />
+    <DashboardLayout title="Classroom Mode" subtitle="Live Attendance & Behavior Analytics">
+      {/* Model status */}
+      {modelStatus === "loading" && (
+        <div className="flex items-center gap-2 rounded-lg border bg-card p-3 mb-5 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin text-primary" />
+          Loading AI detection model…
+        </div>
+      )}
+      {modelStatus === "error" && (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 mb-5 text-sm text-destructive">
+          Failed to load ML model. Please refresh.
+        </div>
+      )}
+
+      {/* Controls */}
+      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="flex flex-wrap items-center gap-3 mb-5">
+        {!isMonitoring ? (
+          <button
+            onClick={handleStart}
+            disabled={modelNotReady}
+            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Camera className="h-4 w-4" /> Start Monitoring
+          </button>
+        ) : (
+          <button onClick={handleStop} className="inline-flex items-center gap-2 rounded-lg bg-destructive px-4 py-2.5 text-sm font-semibold text-destructive-foreground hover:bg-destructive/90 transition-colors">
+            <CameraOff className="h-4 w-4" /> Stop Monitoring
+          </button>
+        )}
+        {isMonitoring && (
+          <div className="ml-auto flex items-center gap-4 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />Live</span>
+            <span><Zap className="inline h-3 w-3 mr-0.5" />{fps} FPS</span>
+            <span><Eye className="inline h-3 w-3 mr-0.5" />{detectionCount} objects</span>
+          </div>
+        )}
       </motion.div>
 
-      {/* Engagement + Timeline */}
-      <div className="grid lg:grid-cols-3 gap-4 md:gap-6 mb-6">
-        {/* Engagement */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.1 }}
-          className="bg-card border rounded-lg p-5 shadow-card"
-        >
-          <h3 className="font-display font-semibold text-sm text-foreground mb-4">Class Engagement</h3>
-          <div className="flex justify-center gap-6">
-            <EngagementRing percentage={72} label="Overall" />
-            <EngagementRing percentage={85} label="Attention" size={90} />
-          </div>
-          <div className="mt-4 grid grid-cols-3 gap-2 text-center">
-            {[
-              { label: "High", value: 5, color: "text-success" },
-              { label: "Medium", value: 3, color: "text-warning" },
-              { label: "Low", value: 2, color: "text-destructive" },
-            ].map((item) => (
-              <div key={item.label} className="bg-muted/50 rounded-lg p-2">
-                <p className={`font-display font-bold text-lg ${item.color}`}>{item.value}</p>
-                <p className="text-[10px] text-muted-foreground">{item.label}</p>
-              </div>
-            ))}
-          </div>
+      {/* Stats */}
+      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }} className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6">
+        <StatCard icon={Users} label="Total Detected" value={snapshot?.totalDetected ?? 0} subtitle="Unique individuals" />
+        <StatCard icon={UserCheck} label="Present" value={snapshot?.presentCount ?? 0} variant="success" subtitle={`${presencePercent}% attendance`} />
+        <StatCard icon={UserX} label="Absent / New" value={snapshot?.absentCount ?? 0} variant="destructive" subtitle="Below threshold" />
+        <StatCard icon={Clock} label="Session" value={sessionDuration} variant="info" subtitle={snapshot ? snapshot.classStability : "—"} />
+      </motion.div>
+
+      {/* Main grid: Camera + Sidebar */}
+      <div className="grid lg:grid-cols-5 gap-4 md:gap-6">
+        {/* Camera Feed */}
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="lg:col-span-3">
+          <LiveCameraFeed
+            ref={feedRef}
+            onDetection={handleDetection}
+            onFpsUpdate={setFps}
+            onModelStatus={setModelStatus}
+          />
         </motion.div>
 
-        {/* Timeline */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.15 }}
-          className="bg-card border rounded-lg p-5 shadow-card lg:col-span-2"
-        >
-          <h3 className="font-display font-semibold text-sm text-foreground mb-4">Behavior Timeline</h3>
-          <div className="space-y-3">
-            {timelineData.map((item, i) => (
-              <div key={i} className="flex items-start gap-3">
-                <div className="flex flex-col items-center">
-                  <div className={`h-2.5 w-2.5 rounded-full ${timelineColors[item.type as keyof typeof timelineColors]} shrink-0 mt-1`} />
-                  {i < timelineData.length - 1 && <div className="w-px h-5 bg-border" />}
+        {/* Right Panel */}
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} className="lg:col-span-2 space-y-4">
+          {/* Engagement Ring */}
+          <div className="rounded-lg border bg-card p-4 shadow-card">
+            <h3 className="font-display font-semibold text-sm text-foreground mb-3 flex items-center gap-2">
+              <Activity className="h-4 w-4 text-primary" /> Attendance Rate
+            </h3>
+            <div className="flex justify-center">
+              <EngagementRing percentage={presencePercent} label="Present" />
+            </div>
+            {snapshot && (
+              <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+                <div className="bg-muted/50 rounded-lg p-2">
+                  <p className="font-display font-bold text-lg text-success">{snapshot.presentCount}</p>
+                  <p className="text-[10px] text-muted-foreground">Present</p>
                 </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[11px] font-mono text-muted-foreground">{item.time}</span>
-                    <span className="text-xs text-foreground">{item.event}</span>
+                <div className="bg-muted/50 rounded-lg p-2">
+                  <p className="font-display font-bold text-lg text-destructive">{snapshot.absentCount}</p>
+                  <p className="text-[10px] text-muted-foreground">Absent</p>
+                </div>
+                <div className="bg-muted/50 rounded-lg p-2">
+                  <p className={`font-display font-bold text-lg ${stabilityColor}`}>{snapshot.classStability}</p>
+                  <p className="text-[10px] text-muted-foreground">Stability</p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Attendee List */}
+          {snapshot && snapshot.attendees.length > 0 && (
+            <div className="rounded-lg border bg-card shadow-card overflow-hidden">
+              <div className="p-3 border-b bg-muted/30">
+                <h3 className="font-display font-semibold text-xs text-foreground">Tracked Individuals</h3>
+              </div>
+              <div className="max-h-[200px] overflow-y-auto">
+                {snapshot.attendees.map((a) => (
+                  <div key={a.trackId} className="flex items-center justify-between px-3 py-2 border-b last:border-0 text-xs">
+                    <div className="flex items-center gap-2">
+                      <div className={`h-2 w-2 rounded-full ${a.isCurrentlyVisible ? "bg-success" : "bg-muted-foreground/30"}`} />
+                      <span className="font-mono text-muted-foreground">{a.trackId}</span>
+                    </div>
+                    <span className={`font-semibold px-1.5 py-0.5 rounded-full text-[10px] ${
+                      a.status === "present" ? "bg-success/10 text-success" :
+                      a.status === "unstable" ? "bg-warning/10 text-warning" :
+                      "bg-muted text-muted-foreground"
+                    }`}>
+                      {a.status}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </motion.div>
+      </div>
+
+      {/* Event Log */}
+      {events.length > 0 && (
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="mt-6">
+          <h3 className="font-display font-semibold text-sm text-foreground mb-3 flex items-center gap-2">
+            <TrendingUp className="h-4 w-4 text-accent" /> Session Event Log
+          </h3>
+          <div className="rounded-lg border bg-card shadow-card overflow-hidden">
+            <div className="max-h-[250px] overflow-y-auto">
+              {events.map((evt) => (
+                <div key={evt.id} className="flex items-start gap-3 px-4 py-2.5 border-b last:border-0 text-xs">
+                  <div className={`h-2 w-2 rounded-full mt-1.5 shrink-0 ${severityColors[evt.severity]}`} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-muted-foreground">{evt.timeFormatted}</span>
+                      <span className="font-semibold text-foreground">{evt.title}</span>
+                    </div>
+                    <p className="text-muted-foreground mt-0.5">{evt.description}</p>
                   </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </motion.div>
-      </div>
-
-      {/* Alerts + Table */}
-      <div className="grid lg:grid-cols-2 gap-4 md:gap-6">
-        {/* Alerts */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.2 }}
-        >
-          <h3 className="font-display font-semibold text-sm text-foreground mb-3">Advisory Alerts</h3>
-          <div className="space-y-2">
-            {classroomAlerts.map((alert, i) => (
-              <AlertItem key={i} {...alert} />
-            ))}
-          </div>
-        </motion.div>
-
-        {/* Attendance Table */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.25 }}
-        >
-          <h3 className="font-display font-semibold text-sm text-foreground mb-3">Attendance List</h3>
-          <StudentTable />
-        </motion.div>
-      </div>
+      )}
     </DashboardLayout>
   );
 }
