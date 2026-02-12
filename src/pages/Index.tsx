@@ -127,6 +127,36 @@ const Index = () => {
             </div>
           </div>
         </motion.button>
+
+        {/* Reports Card */}
+        <motion.button
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.6 }}
+          onClick={() => navigate("/reports")}
+          className="group max-w-4xl mx-auto mt-4 md:mt-6 w-full bg-card rounded-xl border shadow-card hover:shadow-card-hover p-5 md:p-6 text-left transition-all duration-300 hover:-translate-y-1"
+        >
+          <div className="flex items-center gap-4">
+            <div className="rounded-xl bg-warning/10 p-3 group-hover:bg-warning/15 transition-colors">
+              <BarChart3 className="h-7 w-7 text-warning" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h2 className="font-display font-bold text-lg md:text-xl text-foreground mb-1">
+                Reports & Analytics
+              </h2>
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                Attendance summaries, engagement trends, and exam incident logs with exportable data views.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2 hidden sm:flex">
+              {["Attendance", "Trends", "Incidents"].map((tag) => (
+                <span key={tag} className="text-[10px] font-semibold px-2 py-1 rounded-full bg-warning/10 text-warning">
+                  {tag}
+                </span>
+              ))}
+            </div>
+          </div>
+        </motion.button>
       </div>
 
       {/* Features */}
